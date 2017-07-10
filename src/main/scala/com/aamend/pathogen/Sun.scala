@@ -24,13 +24,11 @@ import scala.util.Try
 /**
   * @param maxIterations The maximum number of iterations in Pregel
   * @param tolerance     The absolute zero when convergence is reached
-  * @param teleport      Whether or not to allow teleport of causes and effects
   * @param decay         Whether a decay factor must be applied at each transition
   */
 class Sun(
            maxIterations: Int = 100,
            tolerance: Float = 0.001f,
-           teleport: Float = 0.0f,
            decay: Float = 0.0f
          ) extends Serializable with LazyLogging {
 
@@ -76,14 +74,23 @@ class Sun(
 
   private def propagateCausality(causalGraph: Graph[String, Double], tolerance: Float, maxIterations: Int, decayFactor: Float): VertexRDD[Double] = {
 
-    // Find the number of outDegree for each vertex
-    val graph = causalGraph.outerJoinVertices(causalGraph.outDegrees) { case (_, _, outDegrees) =>
-      outDegrees.getOrElse(0)
-    } mapVertices { case (_, outDegrees) =>
+    def sendInitMessage(e: EdgeContext[String, Double, Map[Long, Double]]) = {
+      e.sendToSrc(Map(e.dstId -> e.attr))
+    }
+
+    def mergeInitMessage(v1: Map[Long, Double], v2: Map[Long, Double]) = {
+      v1 ++ v2
+    }
+
+    val graph = causalGraph.outerJoinVertices(causalGraph.aggregateMessages(sendInitMessage, mergeInitMessage)) { case (_, _, outCausality) =>
+      outCausality.getOrElse(Map())
+    } mapVertices { case (_, outCausality) =>
       // We start with an initial weight of 0
       // We start with a contribution received of 0
       // This pathogen has never been active yet
-      VertexData(0.0d, 0.0d, outDegrees, 0)
+      val totalDegrees = outCausality.size
+      val totalCausality = outCausality.values.sum
+      VertexData(0.0d, 0.0d, totalDegrees, totalCausality, 0)
     }
 
     graph.cache()
@@ -108,7 +115,7 @@ class Sun(
     // Get some stats about convergence
     propagated.cache()
     val averageSteps = "%.2f".format(propagated.vertices.map(_._2._2).sum() / vertices.toDouble)
-    val maxSteps = propagated.vertices.map(_._2._2).max()
+    val maxSteps = propagated.vertices.values.values.max()
     if (maxSteps == maxIterations) {
       val nonConverged = propagated.vertices.filter(_._2._2 == maxSteps).count()
       logger.warn(s"$nonConverged/$vertices nodes did not converge after $maxIterations iterations")
@@ -132,6 +139,7 @@ class Sun(
         msg,
         vData.internalWeight + vData.lastReceived,
         vData.outDegrees,
+        vData.outCausality,
         vData.active + 1
       )
     }
@@ -149,12 +157,13 @@ class Sun(
       // - The new contribution brings less than a X% increase
       // - It does not have any destination node
       val increase = src.lastReceived / src.internalWeight
-      if (increase > tolerance && src.outDegrees > 0) {
+      if (increase > tolerance) {
         // We send a contribution of the transitive causality
-        // This contribution is evenly shared across destination nodes
+        // This contribution is shared across destination nodes according to their pre-defined causality scores
         // This contribution is decayed by a given factor
-        // TODO: This contribution may be shared across non connected nodes (teleport)
-        val contribution = src.lastReceived * (1.0f - decay) / src.outDegrees
+        val toPropagate = src.lastReceived * (1.0f - decay)
+        val relativeCausality = triplet.attr / src.outCausality
+        val contribution = toPropagate * relativeCausality
         Iterator((triplet.dstId, contribution))
       } else {
         Iterator.empty

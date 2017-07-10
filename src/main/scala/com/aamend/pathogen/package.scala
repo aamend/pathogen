@@ -34,6 +34,7 @@ package object pathogen {
                          lastReceived: Double,
                          internalWeight: Double,
                          outDegrees: Int,
+                         outCausality: Double,
                          active: Int
                        )
 
