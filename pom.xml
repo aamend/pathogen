@@ -22,7 +22,7 @@
     <name>pathogen</name>
     <groupId>com.aamend</groupId>
     <artifactId>pathogen</artifactId>
-    <version>1.0</version>
+    <version>1.1-SNAPSHOT</version>
 
     <url>https://github.com/aamend/pathogen</url>
 
@@ -66,7 +66,7 @@
     <scm>
         <url>https://github.com/aamend/pathogen</url>
 	<connection>scm:git:git@github.com:aamend/pathogen.git</connection>
-        <tag>pathogen-1.0</tag>
+        <tag>pathogen</tag>
     </scm>
 
     <distributionManagement>
