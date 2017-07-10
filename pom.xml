@@ -65,8 +65,7 @@
 
     <scm>
         <url>https://github.com/aamend/pathogen</url>
-        <connection>https://github.com/aamend/pathogen.git</connection>
-        <developerConnection>git@github.com:aamend/pathogen.git</developerConnection>
+	<connection>scm:git:git@github.com:aamend/pathogen.git</connection>
         <tag>pathogen</tag>
     </scm>
 
