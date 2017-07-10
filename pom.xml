@@ -26,6 +26,8 @@
     <artifactId>pathogen</artifactId>
     <version>1.0-SNAPSHOT</version>
 
+    <url>https://github.com/aamend/pathogen</url>
+
     <description>
         The rooster crows immediately before sunrise, the rooster causes the sun to rise.
         Using GraphX to detect possible causes and effects between time related events.
