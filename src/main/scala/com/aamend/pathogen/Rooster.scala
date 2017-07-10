@@ -19,7 +19,7 @@ package com.aamend.pathogen
 import com.aamend.pathogen.DateUtils.Frequency
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.HashPartitioner
-import org.apache.spark.graphx.{Edge, Graph}
+import org.apache.spark.graphx.{Edge, Graph, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -27,24 +27,20 @@ import org.apache.spark.storage.StorageLevel
   * @param samplingRate      Frequency used to detect time correlation (Hour, Day, Month, etc.)
   * @param inceptionWindow   Whether an inception time must be deduced from first observation tick
   * @param groupBy           The metadata attribute to use as a grouping parameter
-  * @param eventFilter       The filter function for a given event
   * @param simulations       The number of simulations to run
-  * @param correlationFilter The filter function for a possible correlation
   */
 class Rooster(
                groupBy: String,
                samplingRate: Frequency.Value = Frequency.DAY,
                inceptionWindow: Int = 0,
-               simulations: Int = 100,
-               eventFilter: Event => Boolean = (_: Event) => true,
-               correlationFilter: ((Event, Event)) => Boolean = _ => true
+               simulations: Int = 100
              ) extends Serializable with LazyLogging {
 
   /**
     * @param events The initial time related events
     * @return the causal effects explained as a graph
     */
-  def observeSun(events: RDD[Event]): Graph[String, Double] = {
+  def observeSun(events: RDD[Event]): Graph[VertexId, Double] = {
 
     logger.info(s"Observing correlation across ${events.count()} time related events")
     val correlations = observeCorrelation(events)
@@ -62,27 +58,21 @@ class Rooster(
       normalize(events, correlations)
     }
 
-    val vertexIds = contagions.map(_.source).union(contagions.map(_.target)).distinct().zipWithIndex().mapValues(l => l + 1L).collectAsMap()
-    val bVertexIds = contagions.sparkContext.broadcast(vertexIds)
-
     // Each edge contains the initial causality contribution
     val edges = contagions mapPartitions { it =>
-      val vertexIds = bVertexIds.value
       it map { contagion =>
-        Edge(vertexIds(contagion.source), vertexIds(contagion.target), contagion.causality)
+        Edge(contagion.source, contagion.target, contagion.causality)
       }
     }
 
-    Graph.fromEdges(edges, 0L).mapVertices({ (vId, vdata) =>
-      bVertexIds.value.map(_.swap).get(vId).get
-    })
+    Graph.fromEdges(edges, 0L)
 
   }
 
   private def observeCorrelation(events: RDD[Event]): RDD[Correlation] = {
 
     // Expand events for each tick between a start and an end date
-    val eventTicks = events filter eventFilter flatMap { event =>
+    val eventTicks = events flatMap { event =>
       val ticks = DateUtils.getTicks(samplingRate, event.start, event.end, inceptionWindow)
       ticks map (_ -> event)
     }
@@ -93,17 +83,11 @@ class Rooster(
       for (i <- 0 to events.length - 2; j <- i + 1 until events.length) yield {
         val source = events(i)
         val target = events(j)
-        (source, target)
+        (source.id, target.id)
       }
-    } filter correlationFilter map (_ -> 1) reduceByKey (_ + _)
+    } map (_ -> 1) reduceByKey (_ + _)
 
-    vectors filter { case ((source, target), _) =>
-      source.attributes.contains(groupBy) && target.attributes.contains(groupBy)
-    } map { case ((source, target), obs) =>
-      ((source.attributes(groupBy), target.attributes(groupBy)), obs)
-    } filter { case ((fromGroup, toGroup), _) =>
-      fromGroup != toGroup
-    } reduceByKey (_ + _) map { case ((fromGroup, toGroup), obs) =>
+    vectors map { case ((fromGroup, toGroup), obs) =>
       Correlation(fromGroup, toGroup, obs.toDouble)
     }
   }
@@ -123,7 +107,7 @@ class Rooster(
           val localMaxDate = maxDate - duration
           val randomStart = DateUtils.randomStartDate(minDate, localMaxDate)
           val randomEnd = randomStart + duration
-          Event(randomStart, randomEnd, event.attributes)
+          Event(event.id, randomStart, randomEnd)
         }
 
         // Because it is random, anytime we call a transformation, we might generate a new random value

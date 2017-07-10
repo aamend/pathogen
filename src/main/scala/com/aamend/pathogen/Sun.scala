@@ -24,13 +24,13 @@ import scala.util.Try
 /**
   * @param maxIterations The maximum number of iterations in Pregel
   * @param tolerance     The absolute zero when convergence is reached
-  * @param tunnel        Whether or not to allow tunnel effect
+  * @param teleport      Whether or not to allow teleport of causes and effects
   * @param decay         Whether a decay factor must be applied at each transition
   */
 class Sun(
            maxIterations: Int = 100,
            tolerance: Float = 0.001f,
-           tunnel: Boolean = false,
+           teleport: Float = 0.0f,
            decay: Float = 0.0f
          ) extends Serializable with LazyLogging {
 
@@ -60,9 +60,9 @@ class Sun(
     // PATHOGEN
     // ---------------
 
-    causalGraph.outerJoinVertices(vertexAggressiveness.fullOuterJoin(vertexAggressiveness))({ case (vId, vName, opt) =>
+    causalGraph.outerJoinVertices(vertexAggressiveness.fullOuterJoin(vertexAggressiveness))({ case (vId, _, opt) =>
       Pathogen(
-        vName,
+        vId,
         Try {
           opt.get._2.get
         }.getOrElse(0.0d) / totalAggressiveness,
@@ -153,7 +153,7 @@ class Sun(
         // We send a contribution of the transitive causality
         // This contribution is evenly shared across destination nodes
         // This contribution is decayed by a given factor
-        // TODO: This contribution may be shared across non connected nodes (tunnel effect)
+        // TODO: This contribution may be shared across non connected nodes (teleport)
         val contribution = src.lastReceived * (1.0f - decay) / src.outDegrees
         Iterator((triplet.dstId, contribution))
       } else {

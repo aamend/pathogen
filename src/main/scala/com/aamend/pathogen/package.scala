@@ -19,13 +19,13 @@ package com.aamend
 package object pathogen {
 
   case class Event(
+                    id: Long,
                     start: Long,
-                    end: Long,
-                    attributes: Map[String, String] = Map()
+                    end: Long
                   )
 
   case class Pathogen(
-                       name: String,
+                       id: Long,
                        aggressiveness: Double = 0.0d,
                        sensitivity: Double = 0.0d
                      )
@@ -38,8 +38,8 @@ package object pathogen {
                        )
 
   case class Correlation(
-                          source: String,
-                          target: String,
+                          source: Long,
+                          target: Long,
                           causality: Double = 0.0d
                         )
 
