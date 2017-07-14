@@ -21,7 +21,7 @@ _Pathogen_ is available on Maven Central (synced from Sonatype)
 
 ```xml
 <dependency>
-  <groupId>com.aamend</groupId>
+  <groupId>com.aamend.spark</groupId>
   <artifactId>pathogen</artifactId>
   <version>x.y.z</version>
 </dependency>
@@ -33,7 +33,7 @@ If you are using SBT, simply add the following to your `build.sbt` file:
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.aamend" % "pathogen" % "x.y.z"
+  "com.aamend.spark" % "pathogen" % "x.y.z"
 )
 ```
 
