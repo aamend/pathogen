@@ -208,9 +208,6 @@
                     <junitxml>.</junitxml>
                     <forkMode>once</forkMode>
                     <filereports>WDF TestSuite.txt</filereports>
-                    <environmentVariables>
-                        <SPARK_LOCAL_IP>127.0.0.1</SPARK_LOCAL_IP>
-                    </environmentVariables>
                 </configuration>
                 <executions>
                     <execution>

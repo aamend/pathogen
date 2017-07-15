@@ -19,29 +19,14 @@ package com.aamend
 package object pathogen {
 
   case class Event(
-                    id: Long,
-                    start: Long,
-                    end: Long
+                    eventGroupId: Long,
+                    eventStart: Long,
+                    eventEnd: Long
                   )
 
   case class Pathogen(
-                       id: Long,
                        aggressiveness: Double = 0.0d,
                        sensitivity: Double = 0.0d
                      )
-
-  case class VertexData(
-                         lastReceived: Double,
-                         internalWeight: Double,
-                         outDegrees: Int,
-                         outCausality: Double,
-                         active: Int
-                       )
-
-  case class Correlation(
-                          source: Long,
-                          target: Long,
-                          causality: Double = 0.0d
-                        )
 
 }

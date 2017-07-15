@@ -19,18 +19,16 @@ package com.aamend.pathogen
 import com.aamend.pathogen.DateUtils.Frequency
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.HashPartitioner
-import org.apache.spark.graphx.{Edge, Graph, VertexId}
+import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
-  * @param samplingRate      Frequency used to detect time correlation (Hour, Day, Month, etc.)
-  * @param inceptionWindow   Whether an inception time must be deduced from first observation tick
-  * @param groupBy           The metadata attribute to use as a grouping parameter
-  * @param simulations       The number of simulations to run
+  * @param samplingRate    Frequency used to detect time correlation (Hour, Day, Month, etc.)
+  * @param inceptionWindow Whether an extra time must be applied prior to the first observation
+  * @param simulations     The number of simulations to run (the more the merrier)
   */
 class Rooster(
-               groupBy: String,
                samplingRate: Frequency.Value = Frequency.DAY,
                inceptionWindow: Int = 0,
                simulations: Int = 100
@@ -40,7 +38,7 @@ class Rooster(
     * @param events The initial time related events
     * @return the causal effects explained as a graph
     */
-  def observeSun(events: RDD[Event]): Graph[VertexId, Double] = {
+  def observeSun(events: RDD[Event]): Graph[Pathogen, Double] = {
 
     logger.info(s"Observing correlation across ${events.count()} time related events")
     val correlations = observeCorrelation(events)
@@ -58,44 +56,44 @@ class Rooster(
       normalize(events, correlations)
     }
 
-    // Each edge contains the initial causality contribution
-    val edges = contagions mapPartitions { it =>
-      it map { contagion =>
-        Edge(contagion.source, contagion.target, contagion.causality)
-      }
-    }
-
-    Graph.fromEdges(edges, 0L)
+    val vertices = events.map(_.eventGroupId).distinct().map(l => {
+      (l, Pathogen())
+    })
+    Graph.apply(vertices, contagions)
 
   }
 
-  private def observeCorrelation(events: RDD[Event]): RDD[Correlation] = {
+  private def observeCorrelation(events: RDD[Event]): RDD[Edge[Double]] = {
 
     // Expand events for each tick between a start and an end date
     val eventTicks = events flatMap { event =>
-      val ticks = DateUtils.getTicks(samplingRate, event.start, event.end, inceptionWindow)
+      val ticks = DateUtils.getTicks(samplingRate, event.eventStart, event.eventEnd, inceptionWindow)
       ticks map (_ -> event)
     }
 
     // Group by timestamp and build time correlated events
     val vectors = eventTicks.groupByKey().values flatMap { it =>
-      val events = it.toList.sortBy(_.start)
+      val events = it.toList.sortBy(_.eventStart)
       for (i <- 0 to events.length - 2; j <- i + 1 until events.length) yield {
         val source = events(i)
         val target = events(j)
-        (source.id, target.id)
+        (source.eventGroupId, target.eventGroupId)
       }
     } map (_ -> 1) reduceByKey (_ + _)
 
     vectors map { case ((fromGroup, toGroup), obs) =>
-      Correlation(fromGroup, toGroup, obs.toDouble)
+      Edge(fromGroup, toGroup, obs.toDouble)
     }
   }
 
-  private def observeCausation(events: RDD[Event], correlations: RDD[Correlation], simulations: Int): RDD[Correlation] = {
+  private def observeCausation(
+                                events: RDD[Event],
+                                correlations: RDD[Edge[Double]],
+                                simulations: Int
+                              ): RDD[Edge[Double]] = {
 
-    val minDate = events.map(_.start).min()
-    val maxDate = events.map(_.end).max()
+    val minDate = events.map(_.eventStart).min()
+    val maxDate = events.map(_.eventEnd).max()
 
     val simulationResults = {
 
@@ -103,11 +101,11 @@ class Rooster(
 
         // Generate random start date between minDate and maxDate, leaving the duration as-is
         val randomEvents = events map { event =>
-          val duration = event.end - event.start
+          val duration = event.eventEnd - event.eventStart
           val localMaxDate = maxDate - duration
           val randomStart = DateUtils.randomStartDate(minDate, localMaxDate)
           val randomEnd = randomStart + duration
-          Event(event.id, randomStart, randomEnd)
+          Event(event.eventGroupId, randomStart, randomEnd)
         }
 
         // Because it is random, anytime we call a transformation, we might generate a new random value
@@ -130,25 +128,46 @@ class Rooster(
 
     logger.info("Normalizing causality score")
     val noiseHash = events.sparkContext.union(simulationResults) map { n =>
-      (n.source + n.target, n.causality)
+      (n.srcId + n.dstId, n.attr)
     } reduceByKey (_ + _) partitionBy new HashPartitioner(events.partitions.length)
 
     val signalHash = correlations map { s =>
-      (s.source + s.target, s)
+      (s.srcId + s.dstId, s)
     } partitionBy new HashPartitioner(events.partitions.length)
 
     // Get actual causality score as a measure of Signal / AVG(Noise) ratio
     signalHash.leftOuterJoin(noiseHash).values map { case (signal, noise) =>
       val avgNoise = math.max(noise.getOrElse(0.0d) / simulations, 1.0d)
-      Correlation(signal.source, signal.target, signal.causality / avgNoise)
+      Edge(signal.srcId, signal.dstId, signal.attr / avgNoise)
     }
   }
 
-  private def normalize(events: RDD[Event], correlations: RDD[Correlation]): RDD[Correlation] = {
-    val maxCausalityExplained = correlations.map(_.causality).max()
+  private def normalize(events: RDD[Event], correlations: RDD[Edge[Double]]): RDD[Edge[Double]] = {
+    val maxCausalityExplained = correlations.map(_.attr).max()
     correlations map { c =>
-      Correlation(c.source, c.target, c.causality / maxCausalityExplained)
+      Edge(c.srcId, c.dstId, c.attr / maxCausalityExplained)
     }
+  }
+
+}
+
+object Rooster {
+
+  implicit class RoosterProcessor(events: RDD[Event]) {
+
+    def observeSun(
+                    samplingRate: Frequency.Value = Frequency.DAY,
+                    inceptionWindow: Int = 0,
+                    simulations: Int = 100
+                  ): Graph[Pathogen, Double] = {
+
+      new Rooster(
+        samplingRate,
+        inceptionWindow,
+        simulations
+      ).observeSun(events)
+    }
+
   }
 
 }

@@ -16,6 +16,7 @@
 
 package com.aamend.pathogen
 
+import com.aamend.pathogen.Sun.VertexData
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.graphx._
 
@@ -24,25 +25,25 @@ import scala.util.Try
 /**
   * @param maxIterations The maximum number of iterations in Pregel
   * @param tolerance     The absolute zero when convergence is reached
-  * @param decay         Whether a decay factor must be applied at each transition
+  * @param forgetfulness Whether a decay factor must be applied at each transition
   */
 class Sun(
            maxIterations: Int = 100,
            tolerance: Float = 0.001f,
-           decay: Float = 0.0f
+           forgetfulness: Float = 0.0f
          ) extends Serializable with LazyLogging {
 
   /**
     * @param causalGraph The graph of observed (and normalized) correlations
-    * @return The Contagion graph where vertices contain both a sensitivity and aggressivness scores
+    * @return The Contagion graph where vertices contain both a sensitivity and aggressiveness scores
     */
-  def explainRooster(causalGraph: Graph[String, Double]): Graph[Pathogen, Double] = {
+  def explainRooster(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
 
     // ---------------
     // SENSITIVITY
     // ---------------
 
-    val vertexSensitivity = propagateCausality(causalGraph, tolerance, maxIterations, decay)
+    val vertexSensitivity = propagateCausality(causalGraph, tolerance, maxIterations, forgetfulness)
     val totalSensitivity = vertexSensitivity.values.sum()
     logger.info(s"Total sensitivity is ${"%.2f".format(totalSensitivity)}")
 
@@ -50,7 +51,7 @@ class Sun(
     // AGGRESSIVENESS
     // ---------------
 
-    val vertexAggressiveness = propagateCausality(causalGraph.reverse, tolerance, maxIterations, decay)
+    val vertexAggressiveness = propagateCausality(causalGraph.reverse, tolerance, maxIterations, forgetfulness)
     val totalAggressiveness = vertexAggressiveness.values.sum()
     logger.info(s"Total aggressiveness is ${"%.2f".format(totalAggressiveness)}")
 
@@ -60,7 +61,6 @@ class Sun(
 
     causalGraph.outerJoinVertices(vertexAggressiveness.fullOuterJoin(vertexAggressiveness))({ case (vId, _, opt) =>
       Pathogen(
-        vId,
         Try {
           opt.get._2.get
         }.getOrElse(0.0d) / totalAggressiveness,
@@ -72,9 +72,14 @@ class Sun(
 
   }
 
-  private def propagateCausality(causalGraph: Graph[String, Double], tolerance: Float, maxIterations: Int, decayFactor: Float): VertexRDD[Double] = {
+  private def propagateCausality(
+                                  causalGraph: Graph[Pathogen, Double],
+                                  tolerance: Float,
+                                  maxIterations: Int,
+                                  decayFactor: Float
+                                ): VertexRDD[Double] = {
 
-    def sendInitMessage(e: EdgeContext[String, Double, Map[Long, Double]]) = {
+    def sendInitMessage(e: EdgeContext[Pathogen, Double, Map[Long, Double]]) = {
       e.sendToSrc(Map(e.dstId -> e.attr))
     }
 
@@ -82,7 +87,9 @@ class Sun(
       v1 ++ v2
     }
 
-    val graph = causalGraph.outerJoinVertices(causalGraph.aggregateMessages(sendInitMessage, mergeInitMessage)) { case (_, _, outCausality) =>
+    val graph = causalGraph.outerJoinVertices(
+      causalGraph.aggregateMessages(sendInitMessage, mergeInitMessage)
+    ) { case (_, _, outCausality) =>
       outCausality.getOrElse(Map())
     } mapVertices { case (_, outCausality) =>
       // We start with an initial weight of 0
@@ -161,7 +168,7 @@ class Sun(
         // We send a contribution of the transitive causality
         // This contribution is shared across destination nodes according to their pre-defined causality scores
         // This contribution is decayed by a given factor
-        val toPropagate = src.lastReceived * (1.0f - decay)
+        val toPropagate = src.lastReceived * (1.0f - forgetfulness)
         val relativeCausality = triplet.attr / src.outCausality
         val contribution = toPropagate * relativeCausality
         Iterator((triplet.dstId, contribution))
@@ -169,6 +176,35 @@ class Sun(
         Iterator.empty
       }
     }
+  }
+
+}
+
+object Sun {
+
+  case class VertexData(
+                         lastReceived: Double,
+                         internalWeight: Double,
+                         outDegrees: Int,
+                         outCausality: Double,
+                         active: Int
+                       )
+
+  implicit class SunProcessor(causalGraph: Graph[Pathogen, Double]) {
+
+    def explainRooster(maxIterations: Int = 100,
+                       tolerance: Float = 0.001f,
+                       forgetfulness: Float = 0.0f
+                      ): Graph[Pathogen, Double] = {
+
+      new Sun(
+        maxIterations,
+        tolerance,
+        forgetfulness
+      ).explainRooster(causalGraph)
+
+    }
+
   }
 
 }
