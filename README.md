@@ -1,5 +1,7 @@
 # Pathogen
 
+![Pathogen](/images/logo.png)
+
 _The rooster crows immediately before sunrise, the rooster causes the sun to rise._
 
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.aamend/pathogen/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.aamend/pathogen)
@@ -13,11 +15,11 @@ sensitivity (how likely an event results from an upstream cause).
 
 ### Getting Started
 
-_Pathogen_ project is built for __Scala 2.11.x__ and __Spark 2.1.0__.
+_Pathogen_ project is built for __Scala 2.11.x__ and __Spark 2.1.0__. 
 
 #### Maven
 
-_Pathogen_ is available on Maven Central (synced from Sonatype)
+_Pathogen_ is available on Maven Central. Add below dependency to your `pom.xml` file
 
 ```xml
 <dependency>
@@ -29,12 +31,20 @@ _Pathogen_ is available on Maven Central (synced from Sonatype)
 
 #### SBT
 
-If you are using SBT, simply add the following to your `build.sbt` file:
+If you are using SBT, simply add the following to your `build.sbt` file
 
 ```scala
 libraryDependencies ++= Seq(
   "com.aamend.spark" % "pathogen" % "x.y.z"
 )
+```
+
+#### Spark Packages
+
+Available as a [spark package](https://spark-packages.org/package/aamend/pathogen), include this package in your Spark Applications as follows
+
+```bash
+> $SPARK_HOME/bin/spark-shell --packages com.aamend.spark:pathogen:x.y.z
 ```
 
 ## Authors
