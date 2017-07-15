@@ -1,10 +1,8 @@
-# Pathogen
-
 ![Pathogen](/images/logo.png)
 
 _The rooster crows immediately before sunrise, the rooster causes the sun to rise._
 
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.aamend/pathogen/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen)
 [![Build Status](https://travis-ci.org/aamend/pathogen.svg?branch=master)](https://travis-ci.org/aamend/pathogen) 
 
 Using GraphX to detect possible causes and effects between time related events. We observe a true 
