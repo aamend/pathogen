@@ -18,30 +18,15 @@ package com.aamend.pathogen
 
 import org.joda.time.DateTime
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 object DateUtils {
 
   def getTicks(fq: Frequency.Value, from: Long, to: Long, inceptionWindow: Int = 0): List[Long] = {
     val recoveryTime = new DateTime(getEndDate(fq, to, inceptionWindow))
-    var observation = new DateTime(getStartDate(fq, from, inceptionWindow))
-    val observations = collection.mutable.MutableList[Long]()
-    while (observation.isBefore(recoveryTime)) {
-      val timestamp = observation.getMillis
-      observations += timestamp
-      observation = {
-        fq match {
-          case Frequency.SECOND => observation.plusSeconds(1)
-          case Frequency.MINUTE => observation.plusMinutes(1)
-          case Frequency.HOUR => observation.plusHours(1)
-          case Frequency.DAY => observation.plusDays(1)
-          case Frequency.WEEK => observation.plusWeeks(1)
-          case Frequency.MONTH => observation.plusMonths(1)
-          case Frequency.YEAR => observation.plusYears(1)
-        }
-      }
-    }
-    observations.toList
+    val startTime = new DateTime(getStartDate(fq, from, inceptionWindow))
+    _getTicks(fq, startTime, recoveryTime, List.empty[Long])
   }
 
   def getEndDate(fq: Frequency.Value, to: Long, inceptionWindow: Int = 0): DateTime = {
@@ -51,6 +36,7 @@ object DateUtils {
   def getStartDate(fq: Frequency.Value, from: Long, inceptionWindow: Int = 0): DateTime = {
     val dt = new DateTime(from)
     fq match {
+      case Frequency.MILLISECOND => roundDate(fq, dt.millisOfDay(), inceptionWindow)
       case Frequency.SECOND => roundDate(fq, dt.secondOfDay(), inceptionWindow)
       case Frequency.MINUTE => roundDate(fq, dt.minuteOfDay(), inceptionWindow)
       case Frequency.HOUR => roundDate(fq, dt.hourOfDay(), inceptionWindow)
@@ -65,6 +51,7 @@ object DateUtils {
     val rounded = new DateTime(dt.roundFloorCopy())
     val incubationDate = {
       fq match {
+        case Frequency.MILLISECOND => rounded.minusMillis(inceptionWindow)
         case Frequency.SECOND => rounded.minusSeconds(inceptionWindow)
         case Frequency.MINUTE => rounded.minusMinutes(inceptionWindow)
         case Frequency.HOUR => rounded.minusHours(inceptionWindow)
@@ -77,12 +64,30 @@ object DateUtils {
     incubationDate
   }
 
-  def randomStartDate(min: Long, max: Long): Long = {
-    (Random.nextDouble() * ((max - min) + 1) + min).toLong
+  def randomStartDate(min: Long, max: Long, seed: Long = System.currentTimeMillis()): Long = {
+    (new Random(seed).nextDouble() * ((max - min) + 1) + min).toLong
+  }
+
+  @tailrec
+  protected def _getTicks(fq: Frequency.Value, curTime: DateTime, maxTime: DateTime, ticks: List[Long]): List[Long] = {
+    val nexTime = {
+      fq match {
+        case Frequency.MILLISECOND => curTime.plusMillis(1)
+        case Frequency.SECOND => curTime.plusSeconds(1)
+        case Frequency.MINUTE => curTime.plusMinutes(1)
+        case Frequency.HOUR => curTime.plusHours(1)
+        case Frequency.DAY => curTime.plusDays(1)
+        case Frequency.WEEK => curTime.plusWeeks(1)
+        case Frequency.MONTH => curTime.plusMonths(1)
+        case Frequency.YEAR => curTime.plusYears(1)
+      }
+    }
+    if (nexTime.isAfter(maxTime)) return ticks
+    _getTicks(fq, nexTime, maxTime, ticks :+ curTime.getMillis)
   }
 
   object Frequency extends Enumeration with Serializable {
-    val SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR = Value
+    val MILLISECOND, SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR = Value
   }
 
 }

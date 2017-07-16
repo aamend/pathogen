@@ -16,7 +16,6 @@
 
 package com.aamend.pathogen
 
-import com.aamend.pathogen.DateUtils.Frequency
 import com.aamend.pathogen.Rooster._
 import com.aamend.pathogen.Sun._
 import org.apache.spark.graphx.Graph
@@ -24,38 +23,25 @@ import org.apache.spark.rdd.RDD
 
 object FCM {
 
+  val defaultConfig: Config = ConfigBuilder.create.build
+
   /**
     * Build a Fuzzy Cognitive Map from time related events
     *
-    * @param events the RDD of time events
-    * @param config the FCM config
-    * @return the graph of connection together with their associated metrics and strengths
+    * @param events the RDD of time related events
+    * @param config the FCM configuration object
+    * @return the causal graph
     */
-  def build(events: RDD[Event], config: Config = Config()): Graph[Pathogen, Double] = {
-    events observeSun(
-      config.samplingRate,
-      config.inceptionWindow,
-      config.simulations
-    ) explainRooster(
-      config.maxIterations,
-      config.tolerance,
-      config.forgetfulness
-    )
+  def build(events: RDD[Event], config: Config = defaultConfig): Graph[Pathogen, Double] = {
+    events
+      .observe(config)
+      .explain(config)
   }
 
   implicit class FCMProcessor(events: RDD[Event]) {
-    def fcm(config: Config = Config()): Graph[Pathogen, Double] = {
+    def fcm(config: Config = defaultConfig): Graph[Pathogen, Double] = {
       FCM.build(events, config)
     }
   }
-
-  case class Config(
-                     samplingRate: Frequency.Value = Frequency.DAY,
-                     inceptionWindow: Int = 0,
-                     simulations: Int = 100,
-                     maxIterations: Int = 100,
-                     tolerance: Float = 0.001f,
-                     forgetfulness: Float = 0.0f
-                   )
 
 }

@@ -22,28 +22,19 @@ import org.apache.spark.graphx._
 
 import scala.util.Try
 
-/**
-  * @param maxIterations The maximum number of iterations in Pregel
-  * @param tolerance     The absolute zero when convergence is reached
-  * @param forgetfulness Whether a decay factor must be applied at each transition
-  */
-class Sun(
-           maxIterations: Int = 100,
-           tolerance: Float = 0.001f,
-           forgetfulness: Float = 0.0f
-         ) extends Serializable with LazyLogging {
+class Sun(config: Config) extends Serializable with LazyLogging {
 
   /**
     * @param causalGraph The graph of observed (and normalized) correlations
     * @return The Contagion graph where vertices contain both a sensitivity and aggressiveness scores
     */
-  def explainRooster(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
+  def explain(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
 
     // ---------------
     // SENSITIVITY
     // ---------------
 
-    val vertexSensitivity = propagateCausality(causalGraph, tolerance, maxIterations, forgetfulness)
+    val vertexSensitivity = propagateCausality(causalGraph, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalSensitivity = vertexSensitivity.values.sum()
     logger.info(s"Total sensitivity is ${"%.2f".format(totalSensitivity)}")
 
@@ -51,7 +42,7 @@ class Sun(
     // AGGRESSIVENESS
     // ---------------
 
-    val vertexAggressiveness = propagateCausality(causalGraph.reverse, tolerance, maxIterations, forgetfulness)
+    val vertexAggressiveness = propagateCausality(causalGraph.reverse, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalAggressiveness = vertexAggressiveness.values.sum()
     logger.info(s"Total aggressiveness is ${"%.2f".format(totalAggressiveness)}")
 
@@ -116,10 +107,9 @@ class Sun(
       pregelMerge
     ) mapVertices { case (_, vData) =>
       // Do not forget the left over from vertex tuple
-      (vData.lastReceived + vData.internalWeight, vData.active)
+      (vData.receivedWeight + vData.internalWeight, vData.activated)
     }
 
-    // Get some stats about convergence
     propagated.cache()
     val averageSteps = "%.2f".format(propagated.vertices.map(_._2._2).sum() / vertices.toDouble)
     val maxSteps = propagated.vertices.values.values.max()
@@ -127,7 +117,7 @@ class Sun(
       val nonConverged = propagated.vertices.filter(_._2._2 == maxSteps).count()
       logger.warn(s"$nonConverged/$vertices nodes did not converge after $maxIterations iterations")
     } else {
-      logger.info(s"Pandemic converged after $averageSteps steps in average, max is $maxSteps")
+      logger.info(s"Pathogen converged after $averageSteps steps in average, max is $maxSteps")
     }
 
     propagated.vertices.mapValues(_._1)
@@ -144,10 +134,10 @@ class Sun(
       // We increment the number of times this pathogen became active
       VertexData(
         msg,
-        vData.internalWeight + vData.lastReceived,
+        vData.internalWeight + vData.receivedWeight,
         vData.outDegrees,
         vData.outCausality,
-        vData.active + 1
+        vData.activated + 1
       )
     }
   }
@@ -156,19 +146,19 @@ class Sun(
 
   private def pregelSend(triplet: EdgeTriplet[VertexData, Double]): Iterator[(VertexId, Double)] = {
     val src = triplet.srcAttr
-    if (src.active == 0) {
+    if (src.activated == 0) {
       // On a very first step: We send the entire source causality (stored as edge weight) to the destination node
       Iterator((triplet.dstId, triplet.attr))
     } else {
       // On further steps: A node becomes inactive if
       // - The new contribution brings less than a X% increase
       // - It does not have any destination node
-      val increase = src.lastReceived / src.internalWeight
-      if (increase > tolerance) {
+      val increase = src.receivedWeight / src.internalWeight
+      if (increase > config.tolerance) {
         // We send a contribution of the transitive causality
         // This contribution is shared across destination nodes according to their pre-defined causality scores
         // This contribution is decayed by a given factor
-        val toPropagate = src.lastReceived * (1.0f - forgetfulness)
+        val toPropagate = src.receivedWeight * (1.0f - config.forgetfulness)
         val relativeCausality = triplet.attr / src.outCausality
         val contribution = toPropagate * relativeCausality
         Iterator((triplet.dstId, contribution))
@@ -183,28 +173,17 @@ class Sun(
 object Sun {
 
   case class VertexData(
-                         lastReceived: Double,
+                         receivedWeight: Double,
                          internalWeight: Double,
                          outDegrees: Int,
                          outCausality: Double,
-                         active: Int
+                         activated: Int
                        )
 
   implicit class SunProcessor(causalGraph: Graph[Pathogen, Double]) {
-
-    def explainRooster(maxIterations: Int = 100,
-                       tolerance: Float = 0.001f,
-                       forgetfulness: Float = 0.0f
-                      ): Graph[Pathogen, Double] = {
-
-      new Sun(
-        maxIterations,
-        tolerance,
-        forgetfulness
-      ).explainRooster(causalGraph)
-
+    def explain(config: Config): Graph[Pathogen, Double] = {
+      new Sun(config).explain(causalGraph)
     }
-
   }
 
 }

@@ -16,29 +16,19 @@
 
 package com.aamend.pathogen
 
-import com.aamend.pathogen.DateUtils.Frequency
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.HashPartitioner
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-/**
-  * @param samplingRate    Frequency used to detect time correlation (Hour, Day, Month, etc.)
-  * @param inceptionWindow Whether an extra time must be applied prior to the first observation
-  * @param simulations     The number of simulations to run (the more the merrier)
-  */
-class Rooster(
-               samplingRate: Frequency.Value = Frequency.DAY,
-               inceptionWindow: Int = 0,
-               simulations: Int = 100
-             ) extends Serializable with LazyLogging {
+class Rooster(config: Config) extends Serializable with LazyLogging {
 
   /**
     * @param events The initial time related events
     * @return the causal effects explained as a graph
     */
-  def observeSun(events: RDD[Event]): Graph[Pathogen, Double] = {
+  def observe(events: RDD[Event]): Graph[Pathogen, Double] = {
 
     logger.info(s"Observing correlation across ${events.count()} time related events")
     val correlations = observeCorrelation(events)
@@ -47,9 +37,9 @@ class Rooster(
 
     logger.info(s"Found $correlationCount possible correlations")
 
-    val contagions = if (simulations > 1) {
+    val contagions = if (config.simulations > 1) {
       logger.info(s"Observing potential causes and effects")
-      val causalities = observeCausation(events, correlations, simulations)
+      val causalities = observeCausation(events, correlations, config.simulations)
       normalize(events, causalities)
     } else {
       logger.warn("Correlation does not imply causation, proceed at your own risk")
@@ -67,7 +57,7 @@ class Rooster(
 
     // Expand events for each tick between a start and an end date
     val eventTicks = events flatMap { event =>
-      val ticks = DateUtils.getTicks(samplingRate, event.eventStart, event.eventEnd, inceptionWindow)
+      val ticks = DateUtils.getTicks(config.samplingRate, event.eventStart, event.eventEnd, config.inceptionWindow)
       ticks map (_ -> event)
     }
 
@@ -101,26 +91,28 @@ class Rooster(
 
         // Generate random start date between minDate and maxDate, leaving the duration as-is
         val randomEvents = events map { event =>
+
           val duration = event.eventEnd - event.eventStart
           val localMaxDate = maxDate - duration
-          val randomStart = DateUtils.randomStartDate(minDate, localMaxDate)
+
+          // Because it is random, anytime we call a transformation, we might generate a new random value
+          // We need to make sure a same event will always be generated the same FOR a same simulation
+          val seed = s"""
+                        |start=[${event.eventStart}]
+                        |group=[${event.eventGroupId}]
+                        |stop=[${event.eventEnd}]
+                        |simulation=[$simulation]
+             """.hashCode.toLong
+
+          val randomStart = DateUtils.randomStartDate(minDate, localMaxDate, seed)
           val randomEnd = randomStart + duration
           Event(event.eventGroupId, randomStart, randomEnd)
         }
 
-        // Because it is random, anytime we call a transformation, we might generate a new random value
-        // We make sure this is properly cached - at the expense of overall performance
-        randomEvents.persist(StorageLevel.DISK_ONLY_2)
-        randomEvents.count()
-
         val randomCorrelations = observeCorrelation(randomEvents)
         randomCorrelations.cache()
-
-        // Materialize cache
         val rcc = randomCorrelations.count()
         logger.info(s"Monte carlo $simulation/$simulations - $rcc correlations found")
-
-        randomEvents.unpersist(blocking = true)
         randomCorrelations
 
       }
@@ -152,22 +144,9 @@ class Rooster(
 }
 
 object Rooster {
-
   implicit class RoosterProcessor(events: RDD[Event]) {
-
-    def observeSun(
-                    samplingRate: Frequency.Value = Frequency.DAY,
-                    inceptionWindow: Int = 0,
-                    simulations: Int = 100
-                  ): Graph[Pathogen, Double] = {
-
-      new Rooster(
-        samplingRate,
-        inceptionWindow,
-        simulations
-      ).observeSun(events)
+    def observe(config: Config): Graph[Pathogen, Double] = {
+      new Rooster(config).observe(events)
     }
-
   }
-
 }

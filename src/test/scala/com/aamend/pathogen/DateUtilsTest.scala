@@ -27,6 +27,23 @@ class DateUtilsTest extends FlatSpec with Matchers {
   val rightNowString = "2017-07-06T22:37:23.999"
   val SDF = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS")
   val rightNow: DateTime = new DateTime(SDF.parse(rightNowString))
+  val from: DateTime = new DateTime(SDF.parse("2017-07-07T00:00:00.000"))
+  val to: DateTime = from.plusDays(1)
+
+  "ticks" should "be generated" in {
+
+    val ticks = DateUtils.getTicks(
+      Frequency.HOUR,
+      from.getMillis,
+      to.getMillis,
+      2 // inception of 2 hours
+    )
+
+    ticks.head shouldBe from.minusHours(2).getMillis
+    ticks.last shouldBe to.minusHours(1).getMillis
+    ticks.size shouldBe 26
+  }
+
 
   rightNowString should "be rounded down to SECOND" in {
     SDF.format(DateUtils.roundDate(Frequency.SECOND, rightNow.secondOfDay()).toDate) shouldBe "2017-07-06T22:37:23.000"
