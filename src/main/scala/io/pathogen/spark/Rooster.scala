@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Antoine Amend
+ * Copyright 2017 Pathogen.io
  *
  * Pathogen is licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.aamend.pathogen
+package io.pathogen.spark
 
+import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.HashPartitioner
-import org.apache.spark.graphx.{Edge, Graph}
+import org.apache.spark.graphx.{Edge, Graph, PartitionStrategy}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 class Rooster(config: Config) extends Serializable with LazyLogging {
 
@@ -46,10 +46,10 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
       normalize(events, correlations)
     }
 
-    val vertices = events.map(_.eventGroupId).distinct().map(l => {
-      (l, Pathogen())
-    })
-    Graph.apply(vertices, contagions)
+    val vertices = events.map(_.conceptId).distinct().map(_ -> Pathogen())
+    Graph
+      .apply(vertices, contagions)
+      .partitionBy(PartitionStrategy.EdgePartition2D)
 
   }
 
@@ -57,23 +57,25 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
 
     // Expand events for each tick between a start and an end date
     val eventTicks = events flatMap { event =>
-      val ticks = DateUtils.getTicks(config.samplingRate, event.eventStart, event.eventEnd, config.inceptionWindow)
-      ticks map (_ -> event)
+      DateUtils.getTicks(config.samplingRate, event) map (_ -> event)
     }
 
     // Group by timestamp and build time correlated events
-    val vectors = eventTicks.groupByKey().values flatMap { it =>
+    eventTicks.groupByKey().values flatMap { it =>
       val events = it.toList.sortBy(_.eventStart)
       for (i <- 0 to events.length - 2; j <- i + 1 until events.length) yield {
         val source = events(i)
         val target = events(j)
-        (source.eventGroupId, target.eventGroupId)
+        (source, target)
       }
-    } map (_ -> 1) reduceByKey (_ + _)
-
-    vectors map { case ((fromGroup, toGroup), obs) =>
+    } filter { case (source, target) =>
+      source.eventStart <= target.eventStart
+    } map { case (source, target) =>
+      ((source.conceptId, target.conceptId), source.amplitude + target.amplitude)
+    } reduceByKey (_ + _) map { case ((fromGroup, toGroup), obs) =>
       Edge(fromGroup, toGroup, obs.toDouble)
     }
+
   }
 
   private def observeCausation(
@@ -83,7 +85,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
                               ): RDD[Edge[Double]] = {
 
     val minDate = events.map(_.eventStart).min()
-    val maxDate = events.map(_.eventEnd).max()
+    val maxDate = events.map(_.eventStop).max()
 
     val simulationResults = {
 
@@ -92,21 +94,17 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
         // Generate random start date between minDate and maxDate, leaving the duration as-is
         val randomEvents = events map { event =>
 
-          val duration = event.eventEnd - event.eventStart
+          val duration = event.eventStop - event.eventStart
           val localMaxDate = maxDate - duration
 
-          // Because it is random, anytime we call a transformation, we might generate a new random value
-          // We need to make sure a same event will always be generated the same FOR a same simulation
-          val seed = s"""
-                        |start=[${event.eventStart}]
-                        |group=[${event.eventGroupId}]
-                        |stop=[${event.eventEnd}]
-                        |simulation=[$simulation]
-             """.hashCode.toLong
-
+          // Because it is random, anytime we call a transformation, we might generate a new random value and
+          // therefore break our metrics. We need to make sure a same event will always be generated the same
+          // random start date for each given simulation
+          val seed = Hashing.md5().hashString(s"${event.toString}:$simulation").asLong()
           val randomStart = DateUtils.randomStartDate(minDate, localMaxDate, seed)
           val randomEnd = randomStart + duration
-          Event(event.eventGroupId, randomStart, randomEnd)
+          Event(event.conceptId, randomStart, randomEnd, event.amplitude)
+
         }
 
         val randomCorrelations = observeCorrelation(randomEvents)

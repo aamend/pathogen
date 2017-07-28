@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Antoine Amend
+ * Copyright 2017 Pathogen.io
  *
  * Pathogen is licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,32 +14,30 @@
  * limitations under the License.
  */
 
-package com.aamend.pathogen
+package io.pathogen.spark
 
-import com.aamend.pathogen.DateUtils.Frequency
+import io.pathogen.spark.DateUtils.Frequency
 
 /**
   * @param samplingRate    Frequency used to detect time correlation (Hour, Day, Month, etc.)
-  * @param inceptionWindow Whether an extra time must be applied prior to the first observation
   * @param simulations     The number of simulations to run (the more the merrier)
   * @param maxIterations   The maximum number of iterations in Pregel
   * @param tolerance       The absolute zero when convergence is reached
-  * @param forgetfulness   Whether a decay factor must be applied at each transition
+  * @param forgetfulness   How an amplitude is decayed after being conveyed
+  * @param erratic         If non null, the default causality for un-related events
   */
 case class Config(
                    samplingRate: Frequency.Value = Frequency.DAY,
-                   inceptionWindow: Int = 0,
                    simulations: Int = 100,
                    maxIterations: Int = 100,
                    tolerance: Float = 0.001f,
-                   forgetfulness: Float = 0.0f
+                   forgetfulness: Float = 0.0f,
+                   erratic: Float = 0.0f
                  )
 
 trait ConfigGrammar {
 
   def withSamplingRate(samplingRate: Frequency.Value): ConfigGrammar
-
-  def withInceptionWindow(inceptionWindow: Int): ConfigGrammar
 
   def withSimulations(simulations: Int): ConfigGrammar
 
@@ -48,6 +46,8 @@ trait ConfigGrammar {
   def withTolerance(tolerance: Float): ConfigGrammar
 
   def withForgetfulness(forgetfulness: Float): ConfigGrammar
+
+  def withErratic(erratic: Float): ConfigGrammar
 
   def build: Config
 
@@ -59,74 +59,74 @@ object ConfigBuilder {
 
 case class ConfigBuilder(
                           samplingRate: Frequency.Value = Frequency.DAY,
-                          inceptionWindow: Int = 0,
                           simulations: Int = 100,
                           maxIterations: Int = 100,
                           tolerance: Float = 0.001f,
-                          forgetfulness: Float = 0.0f
+                          forgetfulness: Float = 0.0f,
+                          erratic: Float = 0.0f
                         ) extends ConfigGrammar {
 
   val config: Config = Config(
     samplingRate,
-    inceptionWindow,
     simulations,
     maxIterations,
     tolerance,
-    forgetfulness
+    forgetfulness,
+    erratic
   )
 
   def withSamplingRate(samplingRate: Frequency.Value) = new ConfigBuilder(
     samplingRate,
-    config.inceptionWindow,
     config.simulations,
     config.maxIterations,
     config.tolerance,
-    config.forgetfulness
-  )
-
-  def withInceptionWindow(inceptionWindow: Int) = new ConfigBuilder(
-    config.samplingRate,
-    inceptionWindow,
-    config.simulations,
-    config.maxIterations,
-    config.tolerance,
-    config.forgetfulness
+    config.forgetfulness,
+    config.erratic
   )
 
   def withSimulations(simulations: Int) = new ConfigBuilder(
     config.samplingRate,
-    config.inceptionWindow,
     simulations,
     config.maxIterations,
     config.tolerance,
-    config.forgetfulness
+    config.forgetfulness,
+    config.erratic
   )
 
   def withMaxIterations(maxIterations: Int) = new ConfigBuilder(
     config.samplingRate,
-    config.inceptionWindow,
     config.simulations,
     maxIterations,
     config.tolerance,
-    config.forgetfulness
+    config.forgetfulness,
+    config.erratic
   )
 
   def withTolerance(tolerance: Float) = new ConfigBuilder(
     config.samplingRate,
-    config.inceptionWindow,
     config.simulations,
     config.maxIterations,
     tolerance,
-    config.forgetfulness
+    config.forgetfulness,
+    config.erratic
   )
 
   def withForgetfulness(forgetfulness: Float) = new ConfigBuilder(
     config.samplingRate,
-    config.inceptionWindow,
     config.simulations,
     config.maxIterations,
     config.tolerance,
-    forgetfulness
+    forgetfulness,
+    config.erratic
+  )
+
+  def withErratic(erratic: Float) = new ConfigBuilder(
+    config.samplingRate,
+    config.simulations,
+    config.maxIterations,
+    config.tolerance,
+    config.forgetfulness,
+    erratic
   )
 
   def build: Config = config

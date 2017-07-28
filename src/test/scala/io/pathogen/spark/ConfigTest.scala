@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Antoine Amend
+ * Copyright 2017 Pathogen.io
  *
  * Pathogen is licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,37 +14,37 @@
  * limitations under the License.
  */
 
-package com.aamend.pathogen
+package io.pathogen.spark
 
-import com.aamend.pathogen.DateUtils.Frequency
+import io.pathogen.spark.DateUtils.Frequency
 import org.scalatest.{FlatSpec, Matchers}
 
 class ConfigTest extends FlatSpec with Matchers {
 
-  val inceptionWindow = 10
   val simulations = 10
   val maxIterations = 10
   val tolerance = 0.002f
   val forgetfulness = 0.05f
+  val erratic = 0.02f
 
   "Configuration object" should "be built" in {
 
     val config = ConfigBuilder.create
       .withSamplingRate(Frequency.YEAR)
-      .withInceptionWindow(inceptionWindow)
       .withSimulations(simulations)
       .withMaxIterations(maxIterations)
       .withTolerance(tolerance)
       .withForgetfulness(forgetfulness)
+      .withErratic(erratic)
       .build
 
     config shouldBe Config(
       Frequency.YEAR,
-      inceptionWindow,
       simulations,
       maxIterations,
       tolerance,
-      forgetfulness
+      forgetfulness,
+      erratic
     )
   }
 

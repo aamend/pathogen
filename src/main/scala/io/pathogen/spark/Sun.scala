@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Antoine Amend
+ * Copyright 2017 Pathogen.io
  *
  * Pathogen is licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package com.aamend.pathogen
+package io.pathogen.spark
 
-import com.aamend.pathogen.Sun.VertexData
 import com.typesafe.scalalogging.LazyLogging
+import io.pathogen.spark.Sun.VertexData
 import org.apache.spark.graphx._
+import org.apache.spark.rdd.RDD
 
 import scala.util.Try
 
@@ -30,11 +31,14 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     */
   def explain(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
 
+    val initGraph = initializeGraph(causalGraph)
+    initGraph.cache()
+
     // ---------------
     // SENSITIVITY
     // ---------------
 
-    val vertexSensitivity = propagateCausality(causalGraph, config.tolerance, config.maxIterations, config.forgetfulness)
+    val vertexSensitivity = propagateCausality(initGraph, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalSensitivity = vertexSensitivity.values.sum()
     logger.info(s"Total sensitivity is ${"%.2f".format(totalSensitivity)}")
 
@@ -42,7 +46,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     // AGGRESSIVENESS
     // ---------------
 
-    val vertexAggressiveness = propagateCausality(causalGraph.reverse, config.tolerance, config.maxIterations, config.forgetfulness)
+    val vertexAggressiveness = propagateCausality(initGraph.reverse, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalAggressiveness = vertexAggressiveness.values.sum()
     logger.info(s"Total aggressiveness is ${"%.2f".format(totalAggressiveness)}")
 
@@ -50,7 +54,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     // PATHOGEN
     // ---------------
 
-    causalGraph.outerJoinVertices(vertexAggressiveness.fullOuterJoin(vertexAggressiveness))({ case (vId, _, opt) =>
+    initGraph.outerJoinVertices(vertexAggressiveness.fullOuterJoin(vertexAggressiveness))({ case (_, _, opt) =>
       Pathogen(
         Try {
           opt.get._2.get
@@ -60,6 +64,34 @@ class Sun(config: Config) extends Serializable with LazyLogging {
         }.getOrElse(0.0d) / totalSensitivity
       )
     })
+
+  }
+
+  private def initializeGraph(
+                         causalGraph: Graph[Pathogen, Double]
+                       ): Graph[Pathogen, Double] = {
+
+    if(config.erratic > 0.0f) {
+
+      logger.info("Modelling Erratic behavior requires full ergodicity")
+      val edges = causalGraph.edges.map { edge =>
+        ((edge.srcId, edge.dstId), edge.attr)
+      }
+
+      val allEdges: RDD[Edge[Double]] = causalGraph.vertices.keys.cartesian(causalGraph.vertices.keys).filter { case (v1, v2) =>
+        v1 != v2
+      }
+        .map { case (v1, v2) =>
+          ((v1, v2), config.erratic)
+        }
+        .leftOuterJoin(edges)
+        .map { case ((v1, v2), (default, e)) =>
+          Edge(v1, v2, e.getOrElse(default))
+        }
+
+      Graph.apply(causalGraph.vertices, allEdges)
+
+    } else causalGraph
 
   }
 
