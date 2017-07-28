@@ -35,7 +35,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
       logger.warn("Correlation does not imply causation, proceed at your own risk")
     }
 
-    val correlations: RDD[Edge[Double]] = getEventCorrelation(events)
+    val correlations = getEventCorrelation(events)
     correlations.cache()
     val correlationCount = correlations.count()
     logger.info(s"Found $correlationCount possible correlations")

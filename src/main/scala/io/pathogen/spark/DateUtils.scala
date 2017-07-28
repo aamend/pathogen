@@ -26,7 +26,8 @@ object DateUtils {
   def getTicks(fq: Frequency.Value, event: Event): List[Long] = {
     val recoveryTime = getStopDate(fq, event)
     val startTime = getStartDate(fq, event)
-    _getTicks(fq, startTime, recoveryTime, List.empty[Long])
+    val ticks = _getTicks(fq, startTime, recoveryTime, List.empty[Long])
+    if(ticks.isEmpty) List(startTime.getMillis) else ticks
   }
 
   def getStartDate(fq: Frequency.Value, event: Event): DateTime = {
