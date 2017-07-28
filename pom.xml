@@ -20,8 +20,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <name>pathogen</name>
-    <groupId>io.pathogen</groupId>
-    <artifactId>pathogen-spark</artifactId>
+    <groupId>io.pathogen.spark</groupId>
+    <artifactId>pathogen-core</artifactId>
     <version>0.1-SNAPSHOT</version>
 
     <url>https://github.com/pathogen-io/pathogen-spark</url>

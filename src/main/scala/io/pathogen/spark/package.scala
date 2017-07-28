@@ -18,20 +18,6 @@ package io.pathogen
 
 package object spark {
 
-  case class Observation(
-                          conceptId: Long,
-                          eventStart: Long,
-                          amplitude: Double = 1.0d
-                        ) {
-
-    def toEvent = Event(
-      conceptId,
-      eventStart,
-      eventStart,
-      amplitude
-    )
-  }
-
   case class Event(
                     conceptId: Long,
                     eventStart: Long,

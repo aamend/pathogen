@@ -2,7 +2,7 @@
 
 _The rooster crows immediately before sunrise, the rooster causes the sun to rise._
 
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/io.pathogen.spark/pathogen-core/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.aamend.spark/pathogen)
 [![Build Status](https://travis-ci.org/aamend/pathogen.svg?branch=master)](https://travis-ci.org/aamend/pathogen) 
 
 Using GraphX to detect possible causes and effects between time related events. We observe a true 
@@ -21,8 +21,8 @@ _Pathogen_ is available on Maven Central. Add below dependency to your `pom.xml`
 
 ```xml
 <dependency>
-  <groupId>io.pathogen</groupId>
-  <artifactId>pathogen-spark</artifactId>
+  <groupId>io.pathogen.spark</groupId>
+  <artifactId>pathogen-core</artifactId>
   <version>x.y.z</version>
 </dependency>
 ```
@@ -33,7 +33,7 @@ If you are using SBT, simply add the following to your `build.sbt` file
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.pathogen" % "pathogen-spark" % "x.y.z"
+  "io.pathogen.spark" % "pathogen-core" % "x.y.z"
 )
 ```
 
@@ -42,7 +42,7 @@ libraryDependencies ++= Seq(
 Available as a [spark package](https://spark-packages.org/package/aamend/pathogen), include this package in your Spark Applications as follows
 
 ```bash
-> $SPARK_HOME/bin/spark-shell --packages io.pathogen:pathogen-spark:x.y.z
+> $SPARK_HOME/bin/spark-shell --packages io.pathogen.spark:pathogen-core:x.y.z
 ```
 
 ## Authors

@@ -28,32 +28,31 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
     * @param events The initial time related events
     * @return the causal effects explained as a graph
     */
-  def observe(events: RDD[Event]): Graph[Pathogen, Double] = {
+  def crow(events: RDD[Event]): Graph[Pathogen, Double] = {
 
     logger.info(s"Observing correlation across ${events.count()} time related events")
-    val correlations = observeCorrelation(events)
-    correlations.cache()
-    val correlationCount = correlations.count()
-
-    logger.info(s"Found $correlationCount possible correlations")
-
-    val contagions = if (config.simulations > 1) {
-      logger.info(s"Observing potential causes and effects")
-      val causalities = observeCausation(events, correlations, config.simulations)
-      normalize(events, causalities)
-    } else {
+    if (config.simulations == 0) {
       logger.warn("Correlation does not imply causation, proceed at your own risk")
-      normalize(events, correlations)
     }
 
-    val vertices = events.map(_.conceptId).distinct().map(_ -> Pathogen())
+    val correlations: RDD[Edge[Double]] = getEventCorrelation(events)
+    correlations.cache()
+    val correlationCount = correlations.count()
+    logger.info(s"Found $correlationCount possible correlations")
+
+    val causalities = if (config.simulations > 1) {
+      getEventCausality(events, correlations, config.simulations)
+    } else {
+      correlations
+    }
+
     Graph
-      .apply(vertices, contagions)
+      .apply(events.map(_.conceptId).distinct().map(_ -> Pathogen()), normalize(causalities))
       .partitionBy(PartitionStrategy.EdgePartition2D)
 
   }
 
-  private def observeCorrelation(events: RDD[Event]): RDD[Edge[Double]] = {
+  private def getEventCorrelation(events: RDD[Event]): RDD[Edge[Double]] = {
 
     // Expand events for each tick between a start and an end date
     val eventTicks = events flatMap { event =>
@@ -78,7 +77,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
 
   }
 
-  private def observeCausation(
+  private def getEventCausality(
                                 events: RDD[Event],
                                 correlations: RDD[Edge[Double]],
                                 simulations: Int
@@ -107,7 +106,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
 
         }
 
-        val randomCorrelations = observeCorrelation(randomEvents)
+        val randomCorrelations = getEventCorrelation(randomEvents)
         randomCorrelations.cache()
         val rcc = randomCorrelations.count()
         logger.info(s"Monte carlo $simulation/$simulations - $rcc correlations found")
@@ -132,7 +131,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
     }
   }
 
-  private def normalize(events: RDD[Event], correlations: RDD[Edge[Double]]): RDD[Edge[Double]] = {
+  private def normalize(correlations: RDD[Edge[Double]]): RDD[Edge[Double]] = {
     val maxCausalityExplained = correlations.map(_.attr).max()
     correlations map { c =>
       Edge(c.srcId, c.dstId, c.attr / maxCausalityExplained)
@@ -144,7 +143,7 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
 object Rooster {
   implicit class RoosterProcessor(events: RDD[Event]) {
     def observe(config: Config): Graph[Pathogen, Double] = {
-      new Rooster(config).observe(events)
+      new Rooster(config).crow(events)
     }
   }
 }

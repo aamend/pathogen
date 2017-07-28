@@ -29,7 +29,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     * @param causalGraph The graph of observed (and normalized) correlations
     * @return The Contagion graph where vertices contain both a sensitivity and aggressiveness scores
     */
-  def explain(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
+  def rise(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
 
     val initGraph = initializeGraph(causalGraph)
     initGraph.cache()
@@ -214,7 +214,7 @@ object Sun {
 
   implicit class SunProcessor(causalGraph: Graph[Pathogen, Double]) {
     def explain(config: Config): Graph[Pathogen, Double] = {
-      new Sun(config).explain(causalGraph)
+      new Sun(config).rise(causalGraph)
     }
   }
 
