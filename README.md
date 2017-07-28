@@ -21,8 +21,8 @@ _Pathogen_ is available on Maven Central. Add below dependency to your `pom.xml`
 
 ```xml
 <dependency>
-  <groupId>com.aamend.spark</groupId>
-  <artifactId>pathogen</artifactId>
+  <groupId>io.pathogen</groupId>
+  <artifactId>pathogen-spark</artifactId>
   <version>x.y.z</version>
 </dependency>
 ```
@@ -33,7 +33,7 @@ If you are using SBT, simply add the following to your `build.sbt` file
 
 ```scala
 libraryDependencies ++= Seq(
-  "com.aamend.spark" % "pathogen" % "x.y.z"
+  "io.pathogen" % "pathogen-spark" % "x.y.z"
 )
 ```
 
@@ -42,7 +42,7 @@ libraryDependencies ++= Seq(
 Available as a [spark package](https://spark-packages.org/package/aamend/pathogen), include this package in your Spark Applications as follows
 
 ```bash
-> $SPARK_HOME/bin/spark-shell --packages com.aamend.spark:pathogen:x.y.z
+> $SPARK_HOME/bin/spark-shell --packages io.pathogen:pathogen-spark:x.y.z
 ```
 
 ## Authors

@@ -21,7 +21,7 @@
 
     <name>pathogen</name>
     <groupId>io.pathogen</groupId>
-    <artifactId>pathogen-core</artifactId>
+    <artifactId>pathogen-spark</artifactId>
     <version>0.1-SNAPSHOT</version>
 
     <url>https://github.com/pathogen-io/pathogen-spark</url>
