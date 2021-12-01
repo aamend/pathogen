@@ -16,22 +16,21 @@
 
 package io.pathogen.spark
 
-import com.typesafe.scalalogging.LazyLogging
 import io.pathogen.spark.Sun.VertexData
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
 import scala.util.Try
 
-class Sun(config: Config) extends Serializable with LazyLogging {
+class Sun(config: Config) extends Serializable {
 
   /**
     * @param causalGraph The graph of observed (and normalized) correlations
     * @return The Contagion graph where vertices contain both a sensitivity and aggressiveness scores
     */
   def rise(causalGraph: Graph[Pathogen, Double]): Graph[Pathogen, Double] = {
-
     val initGraph = initializeGraph(causalGraph)
+
     initGraph.cache()
 
     // ---------------
@@ -40,7 +39,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
 
     val vertexSensitivity = propagateCausality(initGraph, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalSensitivity = vertexSensitivity.values.sum()
-    logger.info(s"Total sensitivity is ${"%.2f".format(totalSensitivity)}")
+    println(s"Total sensitivity is ${"%.2f".format(totalSensitivity)}")
 
     // ---------------
     // AGGRESSIVENESS
@@ -48,7 +47,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
 
     val vertexAggressiveness = propagateCausality(initGraph.reverse, config.tolerance, config.maxIterations, config.forgetfulness)
     val totalAggressiveness = vertexAggressiveness.values.sum()
-    logger.info(s"Total aggressiveness is ${"%.2f".format(totalAggressiveness)}")
+    println(s"Total aggressiveness is ${"%.2f".format(totalAggressiveness)}")
 
     // ---------------
     // PATHOGEN
@@ -73,7 +72,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
 
     if(config.erratic > 0.0f) {
 
-      logger.info("Modelling Erratic behavior requires full ergodicity")
+      println("Modelling Erratic behavior requires full ergodicity")
       val edges = causalGraph.edges.map { edge =>
         ((edge.srcId, edge.dstId), edge.attr)
       }
@@ -126,7 +125,7 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     graph.cache()
     val vertices = graph.vertices.count()
     val edges = graph.edges.count()
-    logger.info(s"Starting explaining causality on $vertices hosts and $edges connections")
+    println(s"Starting explaining causality on $vertices hosts and $edges connections")
 
     // Execute Pregel to source to destination nodes
     val propagated = graph.pregel(
@@ -147,9 +146,9 @@ class Sun(config: Config) extends Serializable with LazyLogging {
     val maxSteps = propagated.vertices.values.values.max()
     if (maxSteps == maxIterations) {
       val nonConverged = propagated.vertices.filter(_._2._2 == maxSteps).count()
-      logger.warn(s"$nonConverged/$vertices nodes did not converge after $maxIterations iterations")
+      println(s"$nonConverged/$vertices nodes did not converge after $maxIterations iterations")
     } else {
-      logger.info(s"Pathogen converged after $averageSteps steps in average, max is $maxSteps")
+      println(s"Pathogen converged after $averageSteps steps in average, max is $maxSteps")
     }
 
     propagated.vertices.mapValues(_._1)
