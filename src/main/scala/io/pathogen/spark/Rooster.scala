@@ -17,12 +17,11 @@
 package io.pathogen.spark
 
 import com.google.common.hash.Hashing
-import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.HashPartitioner
 import org.apache.spark.graphx.{Edge, Graph, PartitionStrategy}
 import org.apache.spark.rdd.RDD
 
-class Rooster(config: Config) extends Serializable with LazyLogging {
+class Rooster(config: Config) extends Serializable {
 
   /**
     * @param events The initial time related events
@@ -30,15 +29,15 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
     */
   def crow(events: RDD[Event]): Graph[Pathogen, Double] = {
 
-    logger.info(s"Observing correlation across ${events.count()} time related events")
+    println(s"Observing correlation across ${events.count()} time related events")
     if (config.simulations == 0) {
-      logger.warn("Correlation does not imply causation, proceed at your own risk")
+      println("Correlation does not imply causation, proceed at your own risk")
     }
 
     val correlations = getEventCorrelation(events)
     correlations.cache()
     val correlationCount = correlations.count()
-    logger.info(s"Found $correlationCount possible correlations")
+    println(s"Found $correlationCount possible correlations")
 
     val causalities = if (config.simulations > 1) {
       getEventCausality(events, correlations, config.simulations)
@@ -109,13 +108,13 @@ class Rooster(config: Config) extends Serializable with LazyLogging {
         val randomCorrelations = getEventCorrelation(randomEvents)
         randomCorrelations.cache()
         val rcc = randomCorrelations.count()
-        logger.info(s"Monte carlo $simulation/$simulations - $rcc correlations found")
+        println(s"Monte carlo $simulation/$simulations - $rcc correlations found")
         randomCorrelations
 
       }
     }
 
-    logger.info("Normalizing causality score")
+    println("Normalizing causality score")
     val noiseHash = events.sparkContext.union(simulationResults) map { n =>
       (n.srcId + n.dstId, n.attr)
     } reduceByKey (_ + _) partitionBy new HashPartitioner(events.partitions.length)
